@@ -1,0 +1,9 @@
+node_modules/
+.DS_Store
+.env
+data/*.jsonl
+data/*.csv
+data/watchlist.json
+data/.tmp-*
+playwright-report/
+test-results/

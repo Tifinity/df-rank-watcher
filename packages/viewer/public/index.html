@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>三角洲赛事榜单</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div>
+        <h1>三角洲赛事榜单</h1>
+        <p id="status">读取本地数据中</p>
+      </div>
+      <button id="refresh" class="icon-button" type="button" title="刷新">↻</button>
+    </header>
+
+    <main class="layout">
+      <section class="watch-panel">
+        <div class="section-heading">
+          <h2>关注选手</h2>
+          <span id="watch-count">0/5</span>
+        </div>
+        <div id="watch-grid" class="watch-grid"></div>
+      </section>
+
+      <aside class="config-panel">
+        <div class="section-heading">
+          <h2>配置</h2>
+          <span>最多 5 个</span>
+        </div>
+        <input id="player-search" class="search" type="search" placeholder="搜索选手或平台" />
+        <div id="player-list" class="player-list"></div>
+      </aside>
+    </main>
+
+    <script src="/app.js" type="module"></script>
+  </body>
+</html>
