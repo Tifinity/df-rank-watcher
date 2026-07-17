@@ -81,6 +81,75 @@ function parseDefeatRanking(text, capturedAt) {
   return records;
 }
 
+async function currentPageNumber(page) {
+  const text = await page
+    .locator(".bg3_con .page .on")
+    .first()
+    .innerText({ timeout: 2000 })
+    .catch(() => "1");
+  return Number(text.trim()) || 1;
+}
+
+async function pageSignature(page) {
+  return page.locator(".bg3_con").innerText({ timeout: 5000 });
+}
+
+async function goToFirstRankingPage(page) {
+  const firstPage = page.locator(".bg3_con .page a", { hasText: "首页" }).first();
+  if (await firstPage.isVisible().catch(() => false)) {
+    await firstPage.click();
+    await page.waitForTimeout(800);
+  }
+}
+
+async function clickNextRankingPage(page) {
+  const beforePage = await currentPageNumber(page);
+  const beforeSignature = await pageSignature(page);
+  const next = page.locator(".bg3_con .page a", { hasText: "下一页" }).first();
+
+  if (!(await next.isVisible().catch(() => false))) return false;
+  await next.click();
+  await page.waitForTimeout(900);
+
+  const afterPage = await currentPageNumber(page);
+  const afterSignature = await pageSignature(page);
+  return afterPage !== beforePage || afterSignature !== beforeSignature;
+}
+
+function dedupeRecords(records) {
+  return [
+    ...new Map(
+      records.map((record) => [
+        `${record.rankingType}:${record.playerId}:${record.rank}:${record.platformFilter}:${record.stage}`,
+        record,
+      ]),
+    ).values(),
+  ];
+}
+
+async function collectPaginatedRanking(page, capturedAt, parseRanking, options = {}) {
+  const maxPages = options.maxPages ?? 200;
+  const records = [];
+  const seenPages = new Set();
+
+  await goToFirstRankingPage(page);
+
+  for (let pageIndex = 0; pageIndex < maxPages; pageIndex += 1) {
+    const pageNumber = await currentPageNumber(page);
+    const text = await page.locator("body").innerText();
+    const pageRecords = parseRanking(text, capturedAt);
+    const signature = `${pageNumber}:${pageRecords.map((record) => `${record.rank}:${record.playerId}`).join("|")}`;
+
+    if (seenPages.has(signature)) break;
+    seenPages.add(signature);
+    records.push(...pageRecords);
+
+    if (!(await clickNextRankingPage(page))) break;
+  }
+
+  return dedupeRecords(records);
+}
+
 export async function fetchByPlaywright(targetUrl, capturedAt, options = {}) {
   let chromium;
   try {
@@ -95,16 +164,14 @@ export async function fetchByPlaywright(targetUrl, capturedAt, options = {}) {
     await page.goto(targetUrl, { waitUntil: "domcontentloaded", timeout: 60000 });
     await page.waitForTimeout(3000);
 
-    const scoreText = await page.locator("body").innerText();
-    const records = parseScoreRanking(scoreText, capturedAt);
+    const records = await collectPaginatedRanking(page, capturedAt, parseScoreRanking);
 
     await page.getByText("击败排行榜", { exact: true }).first().click({ timeout: 5000 }).catch(() => {});
     await page.waitForTimeout(1200);
-    const defeatText = await page.locator("body").innerText();
-    records.push(...parseDefeatRanking(defeatText, capturedAt));
+    records.push(...(await collectPaginatedRanking(page, capturedAt, parseDefeatRanking)));
 
     if (!records.length) throw new Error("no rendered ranking rows found");
-    return records;
+    return dedupeRecords(records);
   } finally {
     await browser.close();
   }
