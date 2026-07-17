@@ -3,7 +3,11 @@ const state = {
   watchlist: [],
   stats: [],
   query: "",
+  refreshIntervalMs: 10000,
 };
+
+let refreshTimer = null;
+let loading = false;
 
 const elements = {
   status: document.querySelector("#status"),
@@ -39,6 +43,12 @@ async function requestJson(url, options) {
   const payload = await response.json();
   if (!response.ok) throw new Error(payload.error || response.statusText);
   return payload;
+}
+
+async function loadConfig() {
+  const config = await requestJson("/api/config");
+  const interval = Number(config.viewerRefreshIntervalMs);
+  state.refreshIntervalMs = Number.isFinite(interval) && interval > 0 ? interval : 10000;
 }
 
 function drawSparkline(history) {
@@ -163,13 +173,30 @@ function render() {
 }
 
 async function loadAll() {
+  if (loading) return;
+  loading = true;
   elements.status.textContent = "读取本地数据中";
-  const [players, watchlist] = await Promise.all([requestJson("/api/players"), requestJson("/api/watchlist")]);
-  state.players = players.players;
-  state.watchlist = watchlist.playerIds;
-  await loadStats();
-  elements.status.textContent = `已加载 ${state.players.length} 个选手`;
-  render();
+  try {
+    const [players, watchlist] = await Promise.all([requestJson("/api/players"), requestJson("/api/watchlist")]);
+    state.players = players.players;
+    state.watchlist = watchlist.playerIds;
+    await loadStats();
+    elements.status.textContent = `已加载 ${state.players.length} 个选手，上次刷新 ${formatTime(new Date().toISOString())}`;
+    render();
+  } finally {
+    loading = false;
+  }
+}
+
+function startAutoRefresh() {
+  if (refreshTimer) clearInterval(refreshTimer);
+
+  refreshTimer = setInterval(() => {
+    if (document.hidden) return;
+    loadAll().catch((error) => {
+      elements.status.textContent = error.message;
+    });
+  }, state.refreshIntervalMs);
 }
 
 elements.refresh.addEventListener("click", () => {
@@ -195,7 +222,12 @@ elements.playerList.addEventListener("click", (event) => {
   });
 });
 
-loadAll().catch((error) => {
-  elements.status.textContent = error.message;
-  render();
-});
+loadConfig()
+  .catch(() => {})
+  .then(() => loadAll())
+  .then(startAutoRefresh)
+  .catch((error) => {
+    elements.status.textContent = error.message;
+    render();
+    startAutoRefresh();
+  });

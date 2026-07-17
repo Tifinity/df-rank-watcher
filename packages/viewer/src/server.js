@@ -19,6 +19,7 @@ await loadEnv();
 
 const port = Number(process.env.PORT ?? 3000);
 const host = process.env.HOST ?? "127.0.0.1";
+const viewerRefreshIntervalMs = Number(process.env.VIEWER_REFRESH_INTERVAL_MS ?? 10000);
 const publicDir = path.join(projectRoot, "packages/viewer/public");
 
 const contentTypes = {
@@ -43,6 +44,11 @@ async function readBody(request) {
 async function handleApi(request, response) {
   const url = new URL(request.url, `http://${request.headers.host}`);
   const paths = getDataPaths();
+
+  if (request.method === "GET" && url.pathname === "/api/config") {
+    sendJson(response, 200, { viewerRefreshIntervalMs });
+    return;
+  }
 
   if (request.method === "GET" && url.pathname === "/api/latest") {
     sendJson(response, 200, { records: await readLatestRankings(paths) });
